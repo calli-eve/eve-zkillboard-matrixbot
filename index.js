@@ -137,8 +137,8 @@ const formatMatrixMessage = async (killmail, relevanceCheck, zkb) => {
         
         // Format victim affiliation
         const victimAffiliation = [
-            `<a href="https://zkillboard.com/corporation/${killmail.victim.corporation_id}/">${victimCorp.name}</a>`,
-            victimAlliance ? `<a href="https://zkillboard.com/alliance/${killmail.victim.alliance_id}/">${victimAlliance.name}</a>` : ''
+            ` - <a href="https://zkillboard.com/corporation/${killmail.victim.corporation_id}/">${victimCorp.name}</a>`,
+            victimAlliance ? ` - <a href="https://zkillboard.com/alliance/${killmail.victim.alliance_id}/">${victimAlliance.name}</a>` : ''
         ].filter(Boolean).join(' ');
 
         // Get final blow attacker info
@@ -185,43 +185,41 @@ const formatMatrixMessage = async (killmail, relevanceCheck, zkb) => {
                          }).format(zkb.totalValue)} ISK`;
 
         const statusColor = isKill ? '#4CAF50' : '#F44336'; // Green for kills, Red for losses
-        const statusText = isKill ? 'KILL' : 'LOSS';
-        const statusEmoji = isKill ? '🎯' : '💀';
 
         const html = `
-            <div style="background-color: ${statusColor}20; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid ${statusColor};">
-                <div style="display: flex; align-items: center; gap: 10px;">
+            <div>
+                <div>
                     <img src="${imageUpload.content_uri}" 
                          alt="${shipType.name}" 
-                         style="width: 64px; height: 64px; border-radius: 5px;"/>
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                            <span style="background-color: ${statusColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold;">
-                                ${statusEmoji} ${statusText}
+                         width="64" 
+                         height="64"/>
+                    <div>
+                        <p>
+                            <span data-mx-color="#666">
+                                <span data-mx-bg-color="${statusColor}"><em>${time}</em></span> • 
+                                <a href="https://zkillboard.com/kill/${killmail.killmail_id}/" target="_blank" rel="noopener">zKill</a>
                             </span>
-                            <span style="font-size: 0.9em; color: #666;">
-                                <em>${time}</em> • 
-                                <a href="https://zkillboard.com/kill/${killmail.killmail_id}/">zKill</a>
-                            </span>
-                        </div>
-                        <div style="font-weight: bold; margin: 5px 0;">
-                            <a href="https://zkillboard.com/character/${killmail.victim.character_id}/">${victim.name}</a>
-                            <span style="color: #666;">${victimAffiliation}</span>
-                        </div>
-                        <div>
+                        </p>
+                        <p>
+                            <a href="https://zkillboard.com/character/${killmail.victim.character_id}/" target="_blank" rel="noopener">${victim.name}</a>
+                            <span data-mx-color="#666">${victimAffiliation}</span>
+                        </p>
+                        <p>
                             ${shipType.name} in ${system.name}
-                        </div>
+                        </p>
                     </div>
                 </div>
-                <div style="margin-top: 10px; padding: 10px; background-color: white; border-radius: 5px;">
-                    <div><strong>Final Blow:</strong> ${finalBlowChar.name}</div>
-                    <div><strong>Top Damage:</strong> ${topDamageChar.name}</div>
-                    <div><strong>Attacker Ship:</strong> ${attackerShipInfo.name} (${shipCount})</div>
-                    <div style="margin-top: 10px; color: #666;">
-                        Estimated value: ${new Intl.NumberFormat('en-US', {
-                            maximumFractionDigits: 0
-                        }).format(zkb.totalValue)} ISK
-                    </div>
+                <div data-mx-bg-color="#f5f5f5" style="padding: 10px;">
+                    <p><strong>Final Blow:</strong> <a href="https://zkillboard.com/character/${finalBlowChar.id}/" target="_blank" rel="noopener">${finalBlowChar.name}</a></p>
+                    <p><strong>Top Damage:</strong> <a href="https://zkillboard.com/character/${topDamageChar.id}/" target="_blank" rel="noopener">${topDamageChar.name}</a></p>
+                    <p><strong>Attacker Ship:</strong> <a href="https://zkillboard.com/ship/${attackerShipInfo.id}/" target="_blank" rel="noopener">${attackerShipInfo.name}</a> (${shipCount})</p>
+                    <p style="margin-top: 10px;">
+                        <span data-mx-color="#666">
+                            Estimated value: ${new Intl.NumberFormat('en-US', {
+                                maximumFractionDigits: 0
+                            }).format(zkb.totalValue)} ISK
+                        </span>
+                    </p>
                 </div>
             </div>
         `;
