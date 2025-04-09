@@ -162,7 +162,7 @@ const formatMatrixMessage = async (killmail, relevanceCheck, zkb) => {
         const attackerShipInfo = await getShipInfo(mostUsedShipId);
 
         // Download and upload ship image
-        const imageUrl = `https://images.evetech.net/types/${killmail.victim.ship_type_id}/icon?size=128`;
+        const imageUrl = `https://images.evetech.net/types/${killmail.victim.ship_type_id}/render?size=128`;
         const imageResponse = await fetch(imageUrl);
         const imageBuffer = await imageResponse.arrayBuffer();
         const imageUpload = await matrixClient.uploadContent(
