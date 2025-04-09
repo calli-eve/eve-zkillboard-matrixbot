@@ -1,0 +1,16 @@
+{
+  "name": "zkill-matrix-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Posts zkillboard kills to Matrix",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "matrix-js-sdk": "^37.3.0",
+    "moment": "^2.29.4",
+    "node-fetch": "^3.3.0",
+    "zod": "^3.22.4"
+  }
+}
