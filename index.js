@@ -184,19 +184,20 @@ const formatMatrixMessage = async (killmail, relevanceCheck, zkb) => {
                              maximumFractionDigits: 0
                          }).format(zkb.totalValue)} ISK`;
 
-        const statusColor = isKill ? '#4CAF50' : '#F44336'; // Green for kills, Red for losses
+        const statusEmoji = isKill ? '🟩' : '🟥'; // Green for kills, Red for losses
 
         const html = `
             <div>
                 <div>
                     <img src="${imageUpload.content_uri}" 
-                         alt="${shipType.name}" 
-                         width="64" 
-                         height="64"/>
+                        alt="${shipType.name}" 
+                        width="64" 
+                        height="64"/>
                     <div>
                         <p>
                             <span data-mx-color="#666">
-                                <span data-mx-bg-color="${statusColor}"><em>${time}</em></span> • 
+                                <span>${statusEmoji}</span> •
+                                <em>${time}</em> • 
                                 <a href="https://zkillboard.com/kill/${killmail.killmail_id}/" target="_blank" rel="noopener">zKill</a>
                             </span>
                         </p>
