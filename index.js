@@ -283,8 +283,8 @@ const checkKillmailRelevance = (killmail) => {
     };
 };
 
-const DELAY_BETWEEN_MAILS = 10 * 1000
-const BACK_OFF_ON_ERRORS = 5 * 60 * 1000
+const DELAY_BETWEEN_NO_MAILS = 5 * 60 * 1000
+const BACK_OFF_ON_ERRORS = 10 * 60 * 1000
 
 const pollRedisQ = async () => {
     console.log('Starting RedisQ polling...');
@@ -315,13 +315,16 @@ const pollRedisQ = async () => {
 
                     await postToMatrix(message);
                 }
+                // Ratelimit is 2 requests per second
+                await new Promise(resolve => setTimeout(resolve, 500));
             } else {
-                // Small delay to prevent hammering the API
-                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_MAILS));
+                // Sleep for 5 minutes if no new mails
+                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_NO_MAILS));
             }
             
         } catch (error) {
             console.error('Error polling RedisQ:', error);
+            // Sleep for 10 minutes if we see an error
             await new Promise(resolve => setTimeout(resolve, BACK_OFF_ON_ERRORS));
             // Exit process on specific connection errors
             if (error.message.includes('502') || 
