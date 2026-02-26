@@ -1,10 +1,10 @@
 # EVE Online Killmail to Matrix Bot
 
-A Node.js application that monitors zKillboard's RedisQ for killmails and posts relevant ones to Matrix. The bot monitors specific corporations or alliances and posts their kills and losses in a formatted message.
+A Node.js application that monitors zKillboard's R2 API for killmails and posts relevant ones to Matrix. The bot monitors specific corporations or alliances and posts their kills and losses in a formatted message.
 
 ## Features
 
-- Real-time killmail monitoring via RedisQ
+- Real-time killmail monitoring via R2
 - Configurable corporation/alliance ID watching
 - Matrix integration
 - Formatted messages with:
@@ -31,8 +31,8 @@ A Node.js application that monitors zKillboard's RedisQ for killmails and posts 
         "accessToken": "your_access_token",
         "roomId": "!roomId:matrix.example.org"
     },
-    "userAgent": "EVE Killmail Bot/1.0 (your@email.com)",  // Identify your app to ESI
-    "queueId": "my-custom-queue"  // Optional, randomly generated if not provided
+    "userAgent": "EVE Killmail Bot/1.0 (your@email.com)",
+    "logLevel": "info"
 }
 ```
 
@@ -48,9 +48,11 @@ A Node.js application that monitors zKillboard's RedisQ for killmails and posts 
 - `userAgent`: Identifies your application to ESI (required)
   - Should include your application name and version
   - Must include contact email in parentheses
-- `queueId`: Unique identifier for your RedisQ queue (optional)
-  - If not provided, a random one will be generated
-  - Consistent queueId allows for maintaining position in queue across restarts
+- `logLevel`: Logging verbosity (optional, default `"info"`)
+  - `"debug"` — per-kill log lines and 404 polling details
+  - `"info"` — startup and sequence info only
+  - `"warn"` / `"error"` — only problems
+  - `"silent"` — no output
 
 ### Configuration Examples
 
@@ -88,7 +90,6 @@ The config file is validated on startup and will check:
 - `watchedIds`: Array of numbers. Empty array or omitted to monitor all killmails
 - `matrix`: Required object with valid homeserver URL, access token, and room ID
 - `userAgent`: Must include contact information in parentheses, e.g., "YourApp/1.0 (your@email.com)"
-- `queueId`: Must be a non-empty string
 
 ## Installation Instructions
 
@@ -114,16 +115,15 @@ cd eve-zkill-matrixbot
 ```json
 {
     "watchedIds": [
-        98600992,  // Corp or Alliance ID
-        98600993   // Can add multiple IDs
+        98600992,
+        98600993
     ],
     "matrix": {
         "homeserverUrl": "https://matrix.example.org",
         "accessToken": "your_access_token",
         "roomId": "!roomId:matrix.example.org"
     },
-    "userAgent": "EVE Killmail Bot/1.0 (your@email.com)",
-    "queueId": "my-custom-queue"  // Optional
+    "userAgent": "EVE Killmail Bot/1.0 (your@email.com)"
 }
 ```
 

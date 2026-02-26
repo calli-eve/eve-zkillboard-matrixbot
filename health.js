@@ -31,7 +31,7 @@ export function checkHealth() {
     const health = {
         status: 'healthy',
         details: {
-            redisq: {
+            r2: {
                 status: 'healthy',
                 lastPoll: now - lastPollTime
             },
@@ -46,10 +46,10 @@ export function checkHealth() {
         }
     };
 
-    // Check RedisQ polling
+    // Check R2 polling
     if (now - lastPollTime > MAX_POLL_INTERVAL) {
         health.status = 'unhealthy';
-        health.details.redisq.status = 'unhealthy';
+        health.details.r2.status = 'unhealthy';
     }
 
     // Check ESI calls

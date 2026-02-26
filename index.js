@@ -5,6 +5,8 @@ import { validateConfig } from './config.schema.js';
 import { updateHealthMetrics, checkHealth } from './health.js';
 import { MatrixClient } from 'matrix-js-sdk';
 import crypto from 'node:crypto';
+import { setupLogger } from './logger.js';
+import log from './logger.js';
 
 // Polyfill for Web Crypto API
 if (typeof globalThis.crypto === 'undefined') {
@@ -14,6 +16,7 @@ if (typeof globalThis.crypto === 'undefined') {
 // Load and validate configuration
 const config = JSON.parse(await readFile('./config.json', 'utf-8'));
 const validatedConfig = validateConfig(config);
+setupLogger(validatedConfig.logLevel);
 
 // Initialize Matrix client
 const matrixClient = new MatrixClient({
@@ -31,8 +34,7 @@ const cache = {
     ships: new Map(),
     systems: new Map(),
     corporations: new Map(),
-    alliances: new Map(),
-    killmails: new Map()
+    alliances: new Map()
 };
 
 // Create a simple HTTP server for health checks
@@ -58,7 +60,7 @@ const fetchFromESI = async (path) => {
         updateHealthMetrics('esi');
         return await response.json();
     } catch (error) {
-        console.error(`ESI Error (${path}):`, error);
+        log.error(`ESI Error (${path}):`, error);
         return null;
     }
 };
@@ -123,34 +125,6 @@ const getAllianceInfo = async (allianceId) => {
     return null;
 };
 
-const getKillmailData = async (killID, hash) => {
-    const cacheKey = `${killID}-${hash}`;
-    if (cache.killmails.has(cacheKey)) return cache.killmails.get(cacheKey);
-
-    try {
-        const response = await fetch(`https://esi.evetech.net/v1/killmails/${killID}/${hash}/`, {
-            headers: {
-                'User-Agent': validatedConfig.userAgent
-            }
-        });
-
-        if (!response.ok) {
-            console.error(`Failed to fetch killmail ${killID}: HTTP ${response.status}`);
-            return null;
-        }
-
-        updateHealthMetrics('esi');
-        const killmail = await response.json();
-
-        // Cache the killmail data
-        cache.killmails.set(cacheKey, killmail);
-
-        return killmail;
-    } catch (error) {
-        console.error(`Error fetching killmail ${killID}:`, error);
-        return null;
-    }
-};
 
 const formatMatrixMessage = async (killmail, relevanceCheck, zkb) => {
     try {
@@ -262,7 +236,7 @@ const formatMatrixMessage = async (killmail, relevanceCheck, zkb) => {
             formatted_body: html
         };
     } catch (error) {
-        console.error('Error formatting Matrix message:', error);
+        log.error('Error formatting Matrix message:', error);
         return null;
     }
 };
@@ -272,7 +246,7 @@ const postToMatrix = async (message) => {
         await matrixClient.sendEvent(validatedConfig.matrix.roomId, 'm.room.message', message);
         updateHealthMetrics('matrix');
     } catch (error) {
-        console.error('Error posting to Matrix:', error);
+        log.error('Error posting to Matrix:', error);
     }
 };
 
@@ -286,8 +260,8 @@ const checkKillmailRelevance = (killmail) => {
     }
 
     // Check if victim is from watched entities
-    if (WATCHED_IDS.has(killmail.victim.corporation_id) || 
-        (killmail.victim.alliance_id && WATCHED_IDS.has(killmail.victim.alliance_id))) {
+    if (killmail.victim && (WATCHED_IDS.has(killmail.victim.corporation_id) ||
+        (killmail.victim.alliance_id && WATCHED_IDS.has(killmail.victim.alliance_id)))) {
         return {
             isRelevant: true,
             reason: 'victim'
@@ -313,20 +287,45 @@ const checkKillmailRelevance = (killmail) => {
     };
 };
 
-const DELAY_BETWEEN_NO_MAILS = 5 * 60 * 1000
-const BACK_OFF_ON_ERRORS = 10 * 60 * 1000
+const DELAY_ON_404 = 6 * 1000;
+const DELAY_BETWEEN_KILLS = 100;
+const BACK_OFF_ON_ERRORS = 10 * 60 * 1000;
 
-const pollRedisQ = async () => {
-    console.log('Starting RedisQ polling...');
-    console.log(`Using queue ID: ${validatedConfig.queueId}`);
-    
+const R2_BASE = 'https://r2z2.zkillboard.com/ephemeral';
+
+const fetchCurrentSequence = async () => {
+    const response = await fetch(`${R2_BASE}/sequence.json`, {
+        headers: { 'User-Agent': validatedConfig.userAgent }
+    });
+    if (!response.ok) throw new Error(`sequence.json HTTP error: ${response.status}`);
+    const data = await response.json();
+    return data.sequence;
+};
+
+const pollR2 = async () => {
+    log.info('Starting R2 polling...');
+
+    let sequence = await fetchCurrentSequence();
+    log.info(`Starting from sequence ${sequence}`);
+
     while (true) {
         try {
-            const response = await fetch(`https://zkillredisq.stream/listen.php?queueID=${validatedConfig.queueId}`, {
-                headers: {
-                    'User-Agent': validatedConfig.userAgent
-                }
+            const response = await fetch(`${R2_BASE}/${sequence}.json`, {
+                headers: { 'User-Agent': validatedConfig.userAgent }
             });
+
+            if (response.status === 404) {
+                // Caught up to live — wait and retry the same sequence
+                log.debug(`No kill at seq ${sequence}, sleeping ${DELAY_ON_404 / 1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, DELAY_ON_404));
+                continue;
+            }
+
+            if (response.status === 429) {
+                log.warn('R2 rate limited (429), backing off...');
+                await new Promise(resolve => setTimeout(resolve, BACK_OFF_ON_ERRORS));
+                continue;
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -334,56 +333,37 @@ const pollRedisQ = async () => {
 
             updateHealthMetrics('poll');
             const data = await response.json();
-            if (data.package) {
-                const zkb = data.package.zkb;
-                const killID = data.package.killID;
 
-                // Fetch killmail from ESI using killID and hash
-                console.log(`Fetching killmail ${killID} from ESI...`);
-                const killmail = await getKillmailData(killID, zkb.hash);
+            const zkb = data.zkb;
+            const killmail = { ...data.esi, killmail_id: data.killmail_id };
 
-                if (!killmail) {
-                    console.error(`Failed to fetch killmail ${killID}, skipping...`);
-                    // Ratelimit is 2 requests per second
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    continue;
-                }
+            const victimCorpId = killmail.victim?.corporation_id;
+            const victimAllianceId = killmail.victim?.alliance_id;
+            const relevanceCheck = checkKillmailRelevance(killmail);
 
-                const relevanceCheck = checkKillmailRelevance(killmail);
+            log.debug(`[seq ${data.sequence_id}] kill ${data.killmail_id} | victim corp: ${victimCorpId} alliance: ${victimAllianceId} | relevant: ${relevanceCheck.isRelevant} (${relevanceCheck.reason})`);
 
-                if (relevanceCheck.isRelevant) {
-                    const message = await formatMatrixMessage(killmail, relevanceCheck, zkb);
-                    if(!message) return;
-
+            if (relevanceCheck.isRelevant) {
+                const message = await formatMatrixMessage(killmail, relevanceCheck, zkb);
+                if (message) {
                     await postToMatrix(message);
                 }
-                // Ratelimit is 2 requests per second
-                await new Promise(resolve => setTimeout(resolve, 500));
-            } else {
-                // Sleep for 5 minutes if no new mails
-                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_NO_MAILS));
             }
-            
+
+            sequence++;
+            await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_KILLS));
+
         } catch (error) {
-            console.error('Error polling RedisQ:', error);
-            // Sleep for 10 minutes if we see an error
+            log.error('Error polling R2:', error);
             await new Promise(resolve => setTimeout(resolve, BACK_OFF_ON_ERRORS));
-            // Exit process on specific connection errors
-            if (error.message.includes('502') || 
-                error.message.includes('socket hang up') || 
-                error.code === 'ECONNRESET') {
-                console.error('Fatal connection error detected. Exiting process...');
-                process.exit(1);
-            }
-            
         }
     }
 };
 
-console.log('Starting zKillboard RedisQ listener...');
+log.info('Starting zKillboard R2 listener...');
 if (validatedConfig.watchedIds.length > 0) {
-    console.log(`Watching ${validatedConfig.watchedIds.length} entities`);
+    log.info(`Watching ${validatedConfig.watchedIds.length} entities`);
 } else {
-    console.log('Watching all killmails');
+    log.info('Watching all killmails');
 }
-pollRedisQ(); 
+pollR2();

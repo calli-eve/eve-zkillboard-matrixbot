@@ -21,11 +21,10 @@ export const ConfigSchema = z.object({
         .min(5, "User agent must be descriptive")
         .regex(/^.+\(.+@.+\)$/, "User agent must include contact email in parentheses")
         .describe("User agent string for ESI requests"),
-    
-    queueId: z.string()
-        .min(1, "Queue ID must not be empty")
-        .default(() => `zkill-matrix-${Math.random().toString(36).substring(7)}`)
-        .describe("Unique identifier for RedisQ queue")
+
+    logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'silent'])
+        .default('info')
+        .describe("Logging verbosity level")
 });
 
 export const validateConfig = (config) => {
